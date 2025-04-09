@@ -35,8 +35,8 @@ const Chat = ({ handleBackClick, handleExpandClick, isExpanded, screenVariants, 
             OV
           </div>
           <div>
-            <div className="font-medium">Org Vitality</div>
-            <div className="text-purple-500 font-bold text-xs">OV Care</div>
+            <div className="font-medium">OrgVitality</div>
+            <div className="text-purple-500 font-bold text-xs">Assistant</div>
           </div>
         </div>
       </div>

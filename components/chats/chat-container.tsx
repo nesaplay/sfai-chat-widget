@@ -105,6 +105,8 @@ export function ChatContainer() {
     onWord: (word: string) => void,
     params: { filename?: string; label?: string },
   ) => {
+    console.log("Sending message with context:", params?.label ? getDataBasedOnALabel(params.label.replace("#", "")) : mockData);
+
     const response = await fetch(`/api/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
