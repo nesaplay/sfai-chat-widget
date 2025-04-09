@@ -24,7 +24,7 @@ export function HomeScreen({ handleAskQuestion, screenVariants }: HomeScreenProp
             </div>
           </div>
 
-          <div className="text-white text-2xl font-medium mb-1">Hi John, welcome back.</div>
+          <div className="text-white text-2xl font-medium mb-1">Hi Jeffrey, welcome back.</div>
           <div className="text-white text-2xl font-medium">How can I help you?</div>
         </div>
 

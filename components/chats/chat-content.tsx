@@ -771,7 +771,7 @@ const ChatContent = ({
               <div className="font-medium text-sm text-gray-900 dark:text-gray-100">{PROJECT_CONFIG.appName}</div>
             </div>
           </div>
-          <div className="font-medium mb-1 text-sm">Hi John,</div>
+          <div className="font-medium mb-1 text-sm">Hi Jeffrey,</div>
           {activeSection?.welcomeMessage?.map((paragraph: string, index: number) => (
             <div key={index} className="mb-2">
               {paragraph}

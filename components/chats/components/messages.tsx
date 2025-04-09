@@ -40,7 +40,7 @@ export function MessagesScreen({
           </div>
           <div className="flex-grow">
             <div className="flex items-center justify-between">
-              <p className="font-medium dark:text-white">Hi John...</p>
+              <p className="font-medium dark:text-white">Hi Jeffrey...</p>
               <ChevronLeft className="w-5 h-5 transform rotate-180" />
             </div>
             <div className="text-gray-500 dark:text-gray-400 text-sm">Claire • 11m ago</div>
