@@ -55,7 +55,11 @@ interface ChatContentProps {
   onMessagesChange: (messages: Message[]) => Promise<void>;
   onClearChat: () => void;
   onSendMessage: (message: Message) => Promise<Message>;
-  onStreamMessage?: (text: string, callback: (word: string) => void, { filename, label }: { filename?: string; label?: string }) => Promise<void>;
+  onStreamMessage?: (
+    text: string,
+    callback: (word: string) => void,
+    { filename, label }: { filename?: string; label?: string },
+  ) => Promise<void>;
   taggedFileNames: string[];
   loading: boolean;
 }
@@ -329,7 +333,7 @@ const ChatContent = ({
           {
             filename: taggedFile,
             label: `#${activeLabel}`,
-          }
+          },
         );
 
         // After streaming completes, update the message while preserving all previous messages
@@ -466,7 +470,7 @@ const ChatContent = ({
         textarea.style.height = "auto";
         const newHeight = Math.max(24, Math.min(textarea.scrollHeight, 160));
         textarea.style.height = `${newHeight}px`;
-        
+
         // Ensure cursor position is maintained
         setTimeout(() => {
           textarea.setSelectionRange(curPos, curPos);
@@ -619,7 +623,7 @@ const ChatContent = ({
           </Badge>
         );
       }
-      
+
       // Check for #** pattern (label tags)
       const labelMatch = part.match(/#\*\*([^*]+)\*\*/);
       if (labelMatch) {
@@ -635,7 +639,7 @@ const ChatContent = ({
           </Badge>
         );
       }
-      
+
       // Regular text
       return <span key={index}>{part}</span>;
     });
@@ -644,9 +648,9 @@ const ChatContent = ({
   const ThinkingBubbles = () => {
     return (
       <div className="flex items-center gap-1 px-1">
-        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-thinking [animation-delay:-0.3s]"></div>
-        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-thinking [animation-delay:-0.15s]"></div>
-        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-thinking"></div>
+        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
       </div>
     );
   };
@@ -673,6 +677,7 @@ const ChatContent = ({
 
   const renderMessage = (message: Message) => {
     const isCompleted = completedMessages.has(message.id);
+
     return (
       <div key={message.id} className={cn("flex flex-col", message.type === "user" ? "items-end" : "items-start")}>
         <div
@@ -913,7 +918,7 @@ const ChatContent = ({
                     "text-gray-900 dark:text-gray-100",
                     "text-sm",
                     "box-border",
-                    "overflow-hidden"
+                    "overflow-hidden",
                   )}
                   style={{
                     whiteSpace: "pre-wrap",
