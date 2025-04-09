@@ -1,103 +1,68 @@
-import Image from "next/image";
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  // Use localhost:3000 as the default during development
+  const hostUrl = process.env.NEXT_PUBLIC_HOST || "http://localhost:3000"
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="border-b">
+        <div className="container flex items-center h-16 px-4 mx-auto">
+          <h1 className="text-2xl font-bold">Chat Widget</h1>
+          <nav className="ml-auto">
+            <Link href="/demo-data" passHref>
+              <Button variant="outline">Demo</Button>
+            </Link>
+          </nav>
+        </div>
+      </header>
+      <main className="flex-1">
+        <div className="container px-4 py-12 mx-auto">
+          <div className="max-w-3xl mx-auto space-y-8">
+            <div className="space-y-4">
+              <h2 className="text-3xl font-bold tracking-tight">Embed a chatbot on your website in seconds</h2>
+              <p className="text-gray-500 dark:text-gray-400">
+                Add this simple script tag to your website to include an AI-powered chat widget.
+              </p>
+            </div>
+
+            <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+              <pre className="overflow-x-auto text-sm">
+                <code>{`<script src="${hostUrl}/widget.js"></script>`}</code>
+              </pre>
+            </div>
+
+            <div className="p-4 border rounded-lg bg-yellow-50 text-yellow-800">
+              <h3 className="text-lg font-semibold mb-2">Local Development</h3>
+              <p>You're currently running in development mode. To test the widget on other local websites:</p>
+              <ol className="list-decimal ml-5 mt-2 space-y-1">
+                <li>Make sure this Next.js app is running on port 3000</li>
+                <li>Add the script tag shown above to any local HTML file</li>
+                <li>Open that HTML file in a browser</li>
+                <li>If you encounter CORS issues, you may need to run your test page on a local server</li>
+              </ol>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold">Features</h3>
+              <ul className="ml-6 space-y-2 list-disc">
+                <li>Lightweight embed that won't slow down your site</li>
+                <li>Responsive design that works on all devices</li>
+                <li>Customizable appearance</li>
+                <li>Powered by AI for intelligent responses</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      <footer className="border-t">
+        <div className="container flex items-center h-16 px-4 mx-auto">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            © {new Date().getFullYear()} Chat Widget. All rights reserved.
+          </p>
+        </div>
       </footer>
     </div>
-  );
+  )
 }
