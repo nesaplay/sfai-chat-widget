@@ -72,8 +72,7 @@ const ChatInputArea = ({
     (topic) => topic.label.toLowerCase().includes(query) || `topic:${topic.label.toLowerCase()}`.includes(query),
   );
   const filteredSections = availableSections.filter(
-    (section) =>
-      section.label.toLowerCase().includes(query) || `section:${section.label.toLowerCase()}`.includes(query),
+    (section) => section.label.toLowerCase().includes(query),
   );
 
   const hasSuggestions =

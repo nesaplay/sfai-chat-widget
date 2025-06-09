@@ -70,16 +70,6 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
   useEffect(() => {
     console.log("Session in chat container received via prop:", sessionFromProp);
     setSession(sessionFromProp);
-
-    const supabase = createClient();
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("Session in chat container updated via listener:", session);
-      setSession(session);
-    });
-
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
   }, [sessionFromProp]);
 
   const loadInitialChatData = useCallback(
