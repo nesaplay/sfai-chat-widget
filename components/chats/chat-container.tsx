@@ -47,7 +47,7 @@ const generateFallbackTitleFromResponse = (text: string, maxLength = 70) => {
   return title.trim() || "New Chat";
 };
 
-export default function ChatContainer() {
+export default function ChatContainer({ session }: { session: { access_token: string } | null }) {
   const { isOpen, setIsOpen, activeSection, setLoading, loading, context } = useChatStore();
   const { toast } = useToast();
   const { activeEmail, draftEmailResponse } = useEmailStore();
@@ -410,16 +410,7 @@ export default function ChatContainer() {
     const { data: contextToSend } = getFilteredContext(options?.context);
     let wasError = false;
 
-    // 1. Get Supabase auth token
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    console.log("User", user);
+    // Pass Supabase session
     console.log("Session", session);
 
     if (!session) throw new Error("Not authenticated");
