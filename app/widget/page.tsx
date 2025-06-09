@@ -8,36 +8,59 @@ import { WidgetDataContext } from "./page-types";
 import { Session } from "@supabase/supabase-js";
 
 export default function ChatWidget() {
-  // Use the shared store to set the context for ChatContainer
   const { setContext } = useChatStore();
   const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // This useEffect handles the anonymous Supabase session for the widget user
   useEffect(() => {
     const supabase = createClient();
 
-    const checkAndSignIn = async () => {
+    const initializeSession = async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session || session.user.is_anonymous) {
-          console.log("No active session or is anonymous, signing in to ensure session...");
-          const { error: signInError, data: { user, session } } = await supabase.auth.signInAnonymously();
-          if (signInError) {
-            console.error("Error signing in anonymously:", signInError);
-          } else {
-            console.log("Signed in anonymously successfully.");
-            setSession(session);
-          }
-        } else {
-          console.log("Active session found:", session.user.id);
+        setIsLoading(true);
+        // First check for existing session
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        
+        if (existingSession) {
+          console.log("Found existing session:", existingSession.user.id);
+          setSession(existingSession);
+          setIsLoading(false);
+          return;
+        }
+
+        // If no session exists, sign in anonymously
+        console.log("No active session found, signing in anonymously...");
+        const { data: { session: newSession }, error: signInError } = await supabase.auth.signInAnonymously();
+        
+        if (signInError) {
+          console.error("Error signing in anonymously:", signInError);
+          throw signInError;
+        }
+
+        if (newSession) {
+          console.log("Successfully signed in anonymously:", newSession.user.id);
+          setSession(newSession);
         }
       } catch (error) {
-        console.error("Error checking/signing in session:", error);
+        console.error("Error initializing session:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
-    checkAndSignIn();
+
+    // Initialize session immediately
+    initializeSession();
+
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("Auth state changed:", _event, session?.user.id);
+      setSession(session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // This useEffect handles messages received from the parent window
@@ -66,8 +89,12 @@ export default function ChatWidget() {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [setContext]); // Add setContext to dependency array
+  }, [setContext]);
 
-  // ChatContainer will pull its state (including context) from the useChatStore
-  return <ChatContainer session={session} />;
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  // Only render ChatContainer when we have a session
+  return session ? <ChatContainer session={session} /> : null;
 }
