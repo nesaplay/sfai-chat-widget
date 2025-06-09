@@ -22,12 +22,15 @@ export default function ChatWidget() {
         } = await supabase.auth.getSession();
         if (!session || session.user.is_anonymous) {
           console.log("No active session or is anonymous, signing in to ensure session...");
-          const { error: signInError } = await supabase.auth.signInAnonymously();
+          const { error: signInError, data: { user, session } } = await supabase.auth.signInAnonymously();
           if (signInError) {
             console.error("Error signing in anonymously:", signInError);
           } else {
             console.log("Signed in anonymously successfully.");
           }
+
+          console.log("User", user);
+          console.log("Session", session);
         } else {
           console.log("Active session found:", session.user.id);
         }
