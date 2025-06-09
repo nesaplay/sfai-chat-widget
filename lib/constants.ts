@@ -1,13 +1,12 @@
 interface ProjectConfig {
   appName: string;
-  appDescription: string;
   chatIconUrl: string;
+  assistants: {
+    [key: string]: string;
+  }[];
   sections: {
     id: string;
-    label: string;
-    assistantName: string;
-    instructions: string;
-    welcomeMessage: string[];
+    assistantId: string;
   }[];
 }
 
@@ -17,5 +16,16 @@ if (!PROJECT_CONFIG) {
   throw new Error("Project Config is not set. Please set the NEXT_PUBLIC_CONFIG environment variable.");
 }
 
-// export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
-export const API_URL = "http://localhost:3000";
+if (!PROJECT_CONFIG.assistants) {
+  throw new Error(
+    "Assistants are not set. Please set the {assistants} in NEXT_PUBLIC_PROJECT_CONFIG environment variable.",
+  );
+}
+
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+export const DB_TABLES = {
+  USER_GOOGLE_TOKENS: "user_google_tokens",
+};
+
+export const CHAT_STREAM_URL = process.env.NEXT_PUBLIC_STREAM_ENDPOINT || `${API_URL}/api/chat/stream`;
