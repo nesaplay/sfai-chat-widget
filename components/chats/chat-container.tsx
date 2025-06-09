@@ -185,7 +185,7 @@ export default function ChatContainer() {
   }, [toast]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && session) {
       setCurrentScreen("home");
       setIsExpanded(false);
 
@@ -198,13 +198,13 @@ export default function ChatContainer() {
         setActiveThreadId(null);
         setUploadedFiles([]);
       }
-    } else {
+    } else if (!isOpen) {
       setThreads([]);
       setMessages([]);
       setActiveThreadId(null);
       setUploadedFiles([]);
     }
-  }, [isOpen, activeSection, loadInitialChatData, getUploadedFilesList]);
+  }, [isOpen, activeSection, session, loadInitialChatData, getUploadedFilesList]);
 
   useEffect(() => {
     const handleFileUploaded = () => {
