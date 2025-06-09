@@ -6,7 +6,6 @@ import { cookies } from "next/headers";
 type Message = Database["public"]["Tables"]["messages"]["Row"];
 
 export async function GET(request: Request) {
-  const cookieStore = await cookies();
   const { searchParams } = new URL(request.url);
   const threadId = searchParams.get("thread_id");
 
@@ -14,62 +13,61 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "thread_id query parameter is required" }, { status: 400 });
   }
 
-  const supabaseAuth = createClient(cookieStore);
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAuth.auth.getUser();
-
-  if (authError || !user) {
-    console.error("Auth Error in GET /api/chat/messages:", authError);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = user.id;
-
-  // Use service client for DB access
-  const supabaseService = createServiceRoleClient();
-
   try {
-    // --- Verify Thread Ownership (Important!) ---
-    // Before fetching messages, make sure the thread belongs to the widget user
+    const cookieStore = await cookies();
+    const supabaseAuth = createClient(cookieStore);
+    
+    // First try to get the session
+    const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
+    
+    if (sessionError) {
+      console.error(`Session Error in GET /api/chat/messages:`, sessionError);
+      return NextResponse.json({ error: `Session Error: ${sessionError.message}` }, { status: 401 });
+    }
+
+    if (!session) {
+      console.error(`Auth Error in GET /api/chat/messages: No session found`);
+      return NextResponse.json({ error: "No active session found" }, { status: 401 });
+    }
+
+    const userId = session.user.id;
+    console.log(`GET /api/chat/messages: Authenticated user ${userId}`);
+
+    // Ensure we use the service role client for database operations
+    const supabaseService = createServiceRoleClient();
+
+    // First verify the thread belongs to the user
     const { data: threadData, error: threadError } = await supabaseService
       .from("threads")
       .select("id")
       .eq("id", threadId)
       .eq("user_id", userId)
-      .maybeSingle(); // Use maybeSingle to check existence
+      .single();
 
-    if (threadError) {
-      console.error(`Supabase GET thread check error for thread ${threadId}:`, threadError);
-      return NextResponse.json({ error: `Failed to verify thread access: ${threadError.message}` }, { status: 500 });
+    if (threadError || !threadData) {
+      console.error(`Thread access error for user ${userId} and thread ${threadId}:`, threadError);
+      return NextResponse.json({ error: "Thread not found or access denied" }, { status: 403 });
     }
 
-    if (!threadData) {
-      console.warn(`GET Messages: Thread ${threadId} not found or not owned by widget user ${userId}.`);
-      return NextResponse.json({ error: "Thread not found or access denied" }, { status: 404 });
-    }
-    // --- End Thread Ownership Check ---
-
-    // --- Fetch messages for the verified thread ---
-    console.log(`GET Messages: Fetching messages for thread ${threadId} (owned by ${userId})`);
-
-    const { data: messages, error: messagesError } = await supabaseService
+    // Fetch messages for the thread
+    const { data: messagesData, error: messagesError } = await supabaseService
       .from("messages")
       .select("*")
       .eq("thread_id", threadId)
-      .eq("user_id", userId)
       .order("created_at", { ascending: true });
 
     if (messagesError) {
-      console.error(`Supabase GET messages error for thread ${threadId}:`, messagesError);
-      return NextResponse.json({ error: `Failed to fetch messages: ${messagesError.message}` }, { status: 500 });
+      console.error(`Error fetching messages for thread ${threadId}:`, messagesError);
+      return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
     }
 
-    console.log(`GET Messages: Found ${messages?.length || 0} messages for thread ${threadId}`);
-    return NextResponse.json({ messages: (messages || []) as Message[] });
+    const messages = (messagesData || []) as Message[];
+    console.log(`Found ${messages.length} messages for thread ${threadId}`);
+
+    return NextResponse.json({ messages });
   } catch (error: any) {
-    console.error(`Unexpected GET /api/chat/messages error for thread ${threadId}, user ${userId}:`, error);
-    return NextResponse.json({ error: "An unexpected error occurred while fetching messages" }, { status: 500 });
+    console.error(`Unexpected error in GET /api/chat/messages:`, error);
+    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 });
   }
 }
 

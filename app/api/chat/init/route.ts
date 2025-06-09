@@ -17,24 +17,30 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "assistantId query parameter is required" }, { status: 400 });
   }
 
-  const cookieStore = await cookies();
-  const supabaseAuth = createClient(cookieStore);
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAuth.auth.getUser();
-
-  if (authError || !user) {
-    console.error(`Auth Error in GET /api/chat/init: ${authError}`);
-    return NextResponse.json({ error: `Auth Error in GET /api/chat/init: ${authError}` }, { status: 401 });
-  }
-  const userId = user.id;
-
-  // Ensure we use the service role client for database operations
-  const supabaseService = createServiceRoleClient();
-
   try {
-    // 1. Fetch all threads for the *predefined widget user* & assistant
+    const cookieStore = await cookies();
+    const supabaseAuth = createClient(cookieStore);
+    
+    // First try to get the session
+    const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
+    
+    if (sessionError) {
+      console.error(`Session Error in GET /api/chat/init:`, sessionError);
+      return NextResponse.json({ error: `Session Error: ${sessionError.message}` }, { status: 401 });
+    }
+
+    if (!session) {
+      console.error(`Auth Error in GET /api/chat/init: No session found`);
+      return NextResponse.json({ error: "No active session found" }, { status: 401 });
+    }
+
+    const userId = session.user.id;
+    console.log(`GET /api/chat/init: Authenticated user ${userId}`);
+
+    // Ensure we use the service role client for database operations
+    const supabaseService = createServiceRoleClient();
+
+    // 1. Fetch all threads for the user & assistant
     const { data: threadsData, error: threadsError } = await supabaseService
       .from("threads")
       .select("id, title, updated_at, assistant_id, created_at")
@@ -70,7 +76,7 @@ export async function GET(request: Request) {
         console.log(`GET Init: Found ${messagesForLatestThread.length} messages for thread ${latestThreadId}`);
       }
     } else {
-      console.log(`GET Init: No threads found for assistant ${assistantId} and widget user ${userId}`);
+      console.log(`GET Init: No threads found for assistant ${assistantId} and user ${userId}`);
     }
 
     // Return both threads and the messages for the latest thread

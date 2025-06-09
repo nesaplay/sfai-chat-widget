@@ -3,141 +3,86 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { Database } from "@/types/supabase";
 import { cookies } from "next/headers";
 
-type Thread = Database["public"]["Tables"]["threads"]["Row"];
 type Message = Database["public"]["Tables"]["messages"]["Row"];
-type Assistant = Database["public"]["Tables"]["assistants"]["Row"];
+type Thread = Pick<
+  Database["public"]["Tables"]["threads"]["Row"],
+  "id" | "title" | "updated_at" | "assistant_id" | "created_at"
+>;
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  let requestData;
-
   try {
-    requestData = await request.json();
-  } catch (e) {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const { assistantId } = requestData;
-
-  if (!assistantId) {
-    return NextResponse.json({ error: "Missing required field: assistantId" }, { status: 400 });
-  }
-
-  // --- Authentication ---
-  const supabaseAuth = createClient(cookieStore);
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAuth.auth.getUser();
-
-  if (authError || !user) {
-    console.error("Auth Error in POST /api/chat/welcome:", authError);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = user.id;
-
-  const supabaseService = createServiceRoleClient();
-
-  try {
-    // 0. Fetch Assistant's Welcome Message
-    console.log(`POST Welcome: Fetching welcome message for assistant ${assistantId}`);
-    const { data: assistantData, error: assistantError } = await supabaseService
-      .from("assistants")
-      .select("welcome_message")
-      .eq("id", assistantId)
-      .single();
-
-    if (assistantError || !assistantData) {
-      console.error(`POST Welcome: Assistant fetch error for ID ${assistantId}:`, assistantError);
-      return NextResponse.json(
-        { error: `Failed to fetch assistant details: ${assistantError?.message || "Assistant not found"}` },
-        { status: 404 },
-      );
+    const cookieStore = await cookies();
+    const supabaseAuth = createClient(cookieStore);
+    
+    // First try to get the session
+    const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
+    
+    if (sessionError) {
+      console.error(`Session Error in POST /api/chat/welcome:`, sessionError);
+      return NextResponse.json({ error: `Session Error: ${sessionError.message}` }, { status: 401 });
     }
 
-    const welcomeMessageContent = assistantData.welcome_message as unknown;
-    // Use the first message if it's an array, otherwise check if it's a non-empty string
-    let firstWelcomeMessage: string | null = null;
-    if (
-      Array.isArray(welcomeMessageContent) &&
-      welcomeMessageContent.length > 0 &&
-      typeof welcomeMessageContent[0] === "string" &&
-      welcomeMessageContent[0].trim().length > 0
-    ) {
-      firstWelcomeMessage = welcomeMessageContent[0].trim(); // Trim the element if it's a string
-    } else if (typeof welcomeMessageContent === "string" && welcomeMessageContent.trim().length > 0) {
-      firstWelcomeMessage = welcomeMessageContent.trim();
+    if (!session) {
+      console.error(`Auth Error in POST /api/chat/welcome: No session found`);
+      return NextResponse.json({ error: "No active session found" }, { status: 401 });
     }
 
-    if (!firstWelcomeMessage) {
-      console.warn(`POST Welcome: Assistant ${assistantId} has no valid welcome message configured.`);
-      // Perhaps return a success but indicate no message was seeded?
-      // Or fail if a welcome message is strictly required?
-      // Let's proceed but log it clearly. We could potentially create the thread without the message.
-      // For now, let's return an error as the original code expected a message.
-      return NextResponse.json(
-        { error: `Assistant ${assistantId} does not have a valid welcome message.` },
-        { status: 400 },
-      );
+    const userId = session.user.id;
+    console.log(`POST /api/chat/welcome: Authenticated user ${userId}`);
+
+    const body = await request.json();
+    const { assistantId } = body;
+
+    if (!assistantId) {
+      return NextResponse.json({ error: "assistantId is required" }, { status: 400 });
     }
 
-    // 1. Create the new thread for the widget user
-    console.log(`POST Welcome: Creating new thread for assistant ${assistantId}`);
-    const { data: newThread, error: threadError } = await supabaseService
+    // Ensure we use the service role client for database operations
+    const supabaseService = createServiceRoleClient();
+
+    // Create a new thread
+    const { data: threadData, error: threadError } = await supabaseService
       .from("threads")
       .insert({
+        title: "Email Management",
         assistant_id: assistantId,
         user_id: userId,
-        title: "New Chat", // Changed default title
       })
-      .select()
+      .select("id, title, updated_at, assistant_id, created_at")
       .single();
 
-    if (threadError || !newThread) {
-      console.error(`POST Welcome: Supabase create thread error for assistant ${assistantId}:`, threadError);
-      return NextResponse.json(
-        { error: `Failed to create thread: ${threadError?.message || "Unknown error"}` },
-        { status: 500 },
-      );
+    if (threadError) {
+      console.error(`Error creating welcome thread for user ${userId}:`, threadError);
+      return NextResponse.json({ error: "Failed to create thread" }, { status: 500 });
     }
 
-    console.log(`POST Welcome: Created new thread ${newThread.id} for assistant ${assistantId}`);
+    const thread = threadData as Thread;
+    console.log(`Created welcome thread ${thread.id} for user ${userId}`);
 
-    // 2. Insert the fetched welcome message into the new thread
-    const messageToInsert = {
-      thread_id: newThread.id,
-      assistant_id: assistantId,
-      role: "assistant" as const,
-      content: firstWelcomeMessage, // Use the validated message
-      completed: true,
-      metadata: null, // Or add specific metadata if needed
-      user_id: userId,
-    };
-
-    console.log(`POST Welcome: Inserting welcome message into thread ${newThread.id}`);
-
-    const { data: newMessage, error: messageError } = await supabaseService
+    // Create the welcome message
+    const { data: messageData, error: messageError } = await supabaseService
       .from("messages")
-      .insert(messageToInsert)
-      .select()
+      .insert({
+        thread_id: thread.id,
+        role: "assistant",
+        content: "Hello! I'm your email management assistant. How can I help you today?",
+        assistant_id: assistantId,
+        user_id: userId,
+      })
+      .select("*")
       .single();
 
-    if (messageError || !newMessage) {
-      console.error(`POST Welcome: Supabase insert welcome message error for thread ${newThread.id}:`, messageError);
-      // Should we delete the created thread if message insertion fails?
-      return NextResponse.json(
-        { error: `Failed to save welcome message: ${messageError?.message || "Unknown error"}` },
-        { status: 500 },
-      );
+    if (messageError) {
+      console.error(`Error creating welcome message for thread ${thread.id}:`, messageError);
+      return NextResponse.json({ error: "Failed to create welcome message" }, { status: 500 });
     }
 
-    console.log(
-      `POST Welcome: Successfully created thread ${newThread.id} and seeded welcome message ${newMessage.id}`,
-    );
-    // Return both the new thread and the message
-    return NextResponse.json({ thread: newThread as Thread, message: newMessage as Message }, { status: 201 });
+    const message = messageData as Message;
+    console.log(`Created welcome message ${message.id} for thread ${thread.id}`);
+
+    return NextResponse.json({ thread, message });
   } catch (error: any) {
-    console.error(`POST Welcome: Unexpected error for assistant ${assistantId}:`, error);
-    return NextResponse.json({ error: "An unexpected error occurred during welcome setup" }, { status: 500 });
+    console.error(`Unexpected error in POST /api/chat/welcome:`, error);
+    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 });
   }
 }
