@@ -47,7 +47,12 @@ const generateFallbackTitleFromResponse = (text: string, maxLength = 70) => {
   return title.trim() || "New Chat";
 };
 
-export default function ChatContainer({ session: sessionFromProp }: { session: Session | null }) {
+interface ChatContainerProps {
+  session: Session | null;
+  authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>;
+}
+
+export default function ChatContainer({ session: sessionFromProp, authenticatedFetch }: ChatContainerProps) {
   const { isOpen, setIsOpen, activeSection, setLoading, loading, context } = useChatStore();
   const { toast } = useToast();
   const { activeEmail, draftEmailResponse } = useEmailStore();
@@ -58,8 +63,6 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(false);
   const [isDrafting, setIsDrafting] = useState<boolean>(false);
-  const [session, setSession] = useState<Session | null>(sessionFromProp);
-
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
   const [messageRead, setMessageRead] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -67,26 +70,20 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
 
   console.log("CONTEXT", context);
 
-  useEffect(() => {
-    console.log("Session in chat container received via prop:", sessionFromProp);
-    setSession(sessionFromProp);
-  }, [sessionFromProp]);
-
   const loadInitialChatData = useCallback(
     async (assistantId: string) => {
       if (!assistantId) return;
       setIsInitialLoading(true);
       setLoading(true);
       try {
-        const response = await fetch(`/api/chat/init?assistantId=${assistantId}`);
+        const response = await authenticatedFetch(`/api/chat/init?assistantId=${assistantId}`);
         if (!response.ok) throw new Error("Failed to load initial chat data");
         const data: { threads: Thread[]; messages: Message[] } = await response.json();
 
-        // Check if threads are empty and activeSection exists
         if ((!data.threads || data.threads.length === 0) && activeSection?.assistantId) {
           console.log("No threads found, creating welcome thread...");
           try {
-            const welcomeResponse = await fetch(`/api/chat/welcome`, {
+            const welcomeResponse = await authenticatedFetch("/api/chat/welcome", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ assistantId: activeSection.assistantId }),
@@ -96,12 +93,10 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
               throw new Error(errorData.error || "Failed to create welcome thread");
             }
             const welcomeData: { thread: Thread; message: Message } = await welcomeResponse.json();
-
-            // Update state with the new thread and welcome message
             setThreads([welcomeData.thread]);
             setMessages([welcomeData.message]);
             setActiveThreadId(welcomeData.thread.id);
-            setCurrentScreen("chat"); // Go directly to chat screen
+            setCurrentScreen("chat");
           } catch (welcomeError: any) {
             console.error("Error creating welcome thread:", welcomeError);
             toast({
@@ -109,17 +104,15 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
               description: welcomeError.message || "Failed to start chat with welcome message",
               variant: "destructive",
             });
-            // Fallback: set empty state
             setThreads([]);
             setMessages([]);
             setActiveThreadId(null);
           }
         } else {
-          // Existing threads found, open the first one in chat view
           setThreads(data.threads || []);
           setMessages(data.messages || []);
           setActiveThreadId(data.threads && data.threads.length > 0 ? data.threads[0].id : null);
-          setCurrentScreen("chat"); // Go directly to chat screen
+          setCurrentScreen("chat");
         }
       } catch (error: any) {
         console.error("Error loading initial chat data:", error);
@@ -132,7 +125,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
         setIsInitialLoading(false);
       }
     },
-    [setLoading, toast],
+    [authenticatedFetch, activeSection?.assistantId, toast, setLoading]
   );
 
   const loadMessagesForThread = useCallback(
@@ -144,7 +137,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       }
       setLoading(true);
       try {
-        const response = await fetch(`/api/chat/messages?thread_id=${threadId}`);
+        const response = await authenticatedFetch(`/api/chat/messages?thread_id=${threadId}`);
         if (!response.ok) throw new Error("Failed to load messages for thread");
         const data: { messages: Message[] } = await response.json();
         setMessages(data.messages || []);
@@ -157,7 +150,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
         setLoading(false);
       }
     },
-    [setLoading, toast],
+    [authenticatedFetch, toast, setLoading]
   );
 
   const getUploadedFilesList = useCallback(async () => {
@@ -195,7 +188,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       setActiveThreadId(null);
       setUploadedFiles([]);
     }
-  }, [isOpen, activeSection, loadInitialChatData, getUploadedFilesList]);
+  }, [isOpen, activeSection?.assistantId]);
 
   useEffect(() => {
     const handleFileUploaded = () => {
@@ -210,7 +203,6 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       setMessages([]);
       loadMessagesForThread(threadId);
     }
-
     setCurrentScreen("chat");
   };
 
@@ -228,7 +220,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
     setIsInitialLoading(true);
 
     try {
-      const welcomeResponse = await fetch(`/api/chat/welcome`, {
+      const welcomeResponse = await authenticatedFetch("/api/chat/welcome", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assistantId: activeSection.assistantId }),
@@ -271,7 +263,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       );
 
       try {
-        const response = await fetch(`/api/chat/threads/${threadId}`, {
+        const response = await authenticatedFetch(`/api/chat/threads/${threadId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: newTitle }),
@@ -358,7 +350,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       try {
         const { data: contextForApi } = getFilteredContext();
 
-        const response = await fetch("/api/chat/draft-response", {
+        const response = await authenticatedFetch("/api/chat/draft-response", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -418,7 +410,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       let wasError = false;
 
       // 1. Get Supabase auth token
-      if (!session) {
+      if (!sessionFromProp) {
         console.error("Streaming error: Not authenticated. Session is null.");
         toast({
           title: "Authentication Error",
@@ -428,9 +420,9 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
         return;
       }
 
-      const fetchStreamPromise = fetch(CHAT_STREAM_URL, {
+      const fetchStreamPromise = authenticatedFetch(CHAT_STREAM_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionFromProp.access_token}` },
         body: JSON.stringify({
           message: messageContent,
           thread_id: currentActiveThreadId,
@@ -528,7 +520,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
               console.log(
                 `[ChatContainer] Attempting to summarize response for title, length: ${assistantFullResponse.length}`,
               );
-              const summarizeResponse = await fetch("/api/chat/summarize", {
+              const summarizeResponse = await authenticatedFetch("/api/chat/summarize", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text: assistantFullResponse }),
@@ -562,7 +554,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
                 `[ChatContainer] Updating title for thread ${currentActiveThreadId} to: "${newTitle}" (after summary/fallback)`,
               );
               try {
-                const patchResponse = await fetch(`/api/chat/threads/${currentActiveThreadId}`, {
+                const patchResponse = await authenticatedFetch(`/api/chat/threads/${currentActiveThreadId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ title: newTitle }),
@@ -599,7 +591,7 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
           if (!internalFirstWordHandled) {
             setMessages((prevMessages) => prevMessages.filter((msg) => msg.id !== THINKING_MSG_ID));
           }
-          await loadMessagesForThread(currentActiveThreadId);
+          await loadInitialChatData(activeSection.assistantId);
 
           setThreads((prevThreads) => {
             const threadExists = prevThreads.some((thread) => thread.id === currentActiveThreadId);
@@ -652,7 +644,6 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       activeSection,
       activeThreadId,
       loadInitialChatData,
-      loadMessagesForThread,
       setLoading,
       setThreads,
       threads,
@@ -661,7 +652,8 @@ export default function ChatContainer({ session: sessionFromProp }: { session: S
       getFilteredContext,
       handleFirstWordReceived,
       firstWordHasBeenReceived,
-      session,
+      sessionFromProp,
+      authenticatedFetch,
     ],
   );
 

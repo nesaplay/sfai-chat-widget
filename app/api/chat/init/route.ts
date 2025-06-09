@@ -18,23 +18,26 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Get the Authorization header
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.error("No Authorization header found");
+      return NextResponse.json({ error: "No authorization token provided" }, { status: 401 });
+    }
+
+    const token = authHeader.split(" ")[1];
     const cookieStore = await cookies();
     const supabaseAuth = createClient(cookieStore);
     
-    // First try to get the session
-    const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
+    // Verify the token
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
     
-    if (sessionError) {
-      console.error(`Session Error in GET /api/chat/init:`, sessionError);
-      return NextResponse.json({ error: `Session Error: ${sessionError.message}` }, { status: 401 });
+    if (userError || !user) {
+      console.error(`Auth Error in GET /api/chat/init:`, userError);
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    if (!session) {
-      console.error(`Auth Error in GET /api/chat/init: No session found`);
-      return NextResponse.json({ error: "No active session found" }, { status: 401 });
-    }
-
-    const userId = session.user.id;
+    const userId = user.id;
     console.log(`GET /api/chat/init: Authenticated user ${userId}`);
 
     // Ensure we use the service role client for database operations

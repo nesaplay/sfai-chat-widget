@@ -7,6 +7,23 @@ import { useChatStore } from "@/lib/store/use-chat-store";
 import { WidgetDataContext } from "./page-types";
 import { Session } from "@supabase/supabase-js";
 
+// Create a custom fetch function that includes the session token
+const createAuthenticatedFetch = (session: Session | null) => {
+  return async (url: string, options: RequestInit = {}) => {
+    if (!session?.access_token) {
+      throw new Error("No session token available");
+    }
+
+    const headers = new Headers(options.headers);
+    headers.set("Authorization", `Bearer ${session.access_token}`);
+
+    return fetch(url, {
+      ...options,
+      headers,
+    });
+  };
+};
+
 export default function ChatWidget() {
   const { setContext } = useChatStore();
   const [session, setSession] = useState<Session | null>(null);
@@ -19,9 +36,15 @@ export default function ChatWidget() {
     const initializeSession = async () => {
       try {
         setIsLoading(true);
-        // First check for existing session
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
         
+        // First check for existing session
+        const { data: { session: existingSession }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error("Error getting session:", sessionError);
+          throw sessionError;
+        }
+
         if (existingSession) {
           console.log("Found existing session:", existingSession.user.id);
           setSession(existingSession);
@@ -53,9 +76,21 @@ export default function ChatWidget() {
     initializeSession();
 
     // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("Auth state changed:", _event, session?.user.id);
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      console.log("Auth state changed:", event, currentSession?.user.id);
+      
+      if (event === 'SIGNED_OUT') {
+        // If signed out, try to sign in anonymously again
+        const { data: { session: newSession }, error: signInError } = await supabase.auth.signInAnonymously();
+        if (signInError) {
+          console.error("Error re-signing in anonymously:", signInError);
+        } else if (newSession) {
+          console.log("Re-signed in anonymously:", newSession.user.id);
+          setSession(newSession);
+        }
+      } else {
+        setSession(currentSession);
+      }
     });
 
     return () => {
@@ -96,5 +131,5 @@ export default function ChatWidget() {
   }
 
   // Only render ChatContainer when we have a session
-  return session ? <ChatContainer session={session} /> : null;
+  return session ? <ChatContainer session={session} authenticatedFetch={createAuthenticatedFetch(session)} /> : null;
 }
