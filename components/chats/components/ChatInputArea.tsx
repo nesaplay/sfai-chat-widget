@@ -9,7 +9,7 @@ import { PopoverAnchor } from "@radix-ui/react-popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 type UploadedFile = {
   id: string;
@@ -35,7 +35,7 @@ interface ChatInputAreaProps {
   availablePriorities: MentionOption[];
   availableTopics: MentionOption[];
   availableSections: MentionOption[];
-  insertTag: (type: 'file' | 'priority' | 'topic' | 'section', value: string) => void;
+  insertTag: (type: "file" | "priority" | "topic" | "section", value: string) => void;
   isStreaming: boolean;
   loading: boolean;
 }
@@ -58,33 +58,42 @@ const ChatInputArea = ({
   loading,
 }: ChatInputAreaProps) => {
   const atIndex = inputValue.lastIndexOf("@");
-  const query = mentionPopoverOpen && atIndex !== -1 && textareaRef.current?.selectionStart ? 
-                inputValue.substring(atIndex + 1, textareaRef.current.selectionStart).toLowerCase() : '';
+  const query =
+    mentionPopoverOpen && atIndex !== -1 && textareaRef.current?.selectionStart
+      ? inputValue.substring(atIndex + 1, textareaRef.current.selectionStart).toLowerCase()
+      : "";
 
-  const filteredFiles = availableFiles.filter(file => 
-    file.label.toLowerCase().includes(query)
+  const filteredFiles = availableFiles.filter((file) => file.label.toLowerCase().includes(query));
+  const filteredPriorities = availablePriorities.filter(
+    (priority) =>
+      priority.label.toLowerCase().includes(query) || `priority:${priority.label.toLowerCase()}`.includes(query),
   );
-  const filteredPriorities = availablePriorities.filter(priority => 
-    priority.label.toLowerCase().includes(query) || `priority:${priority.label.toLowerCase()}`.includes(query)
+  const filteredTopics = availableTopics.filter(
+    (topic) => topic.label.toLowerCase().includes(query) || `topic:${topic.label.toLowerCase()}`.includes(query),
   );
-  const filteredTopics = availableTopics.filter(topic => 
-    topic.label.toLowerCase().includes(query) || `topic:${topic.label.toLowerCase()}`.includes(query)
+  const filteredSections = availableSections.filter(
+    (section) =>
+      section.label.toLowerCase().includes(query) || `section:${section.label.toLowerCase()}`.includes(query),
   );
 
-  const hasSuggestions = filteredFiles.length > 0 || filteredPriorities.length > 0 || filteredTopics.length > 0;
+  const hasSuggestions =
+    filteredFiles.length > 0 ||
+    filteredPriorities.length > 0 ||
+    filteredTopics.length > 0 ||
+    filteredSections.length > 0;
 
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.overflowY = 'hidden';
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.overflowY = "hidden";
+      textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [inputValue, textareaRef]);
 
-  const onSelect = (type: 'file' | 'priority' | 'topic' | 'section', value: string) => {
+  const onSelect = (type: "file" | "priority" | "topic" | "section", value: string) => {
     insertTag(type, value);
     setMentionPopoverOpen(false);
-  }
+  };
 
   return (
     <Popover open={mentionPopoverOpen && hasSuggestions} onOpenChange={setMentionPopoverOpen}>
@@ -98,10 +107,10 @@ const ChatInputArea = ({
           <CommandInput placeholder="Tag a file, priority, or topic..." />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
-            {availableSections.length > 0 && (
+            {filteredSections.length > 0 && (
               <CommandGroup heading="Sections">
-                {availableSections.map((section) => (
-                  <CommandItem key={section.value} onSelect={() => onSelect('section', section.value)}>
+                {filteredSections.map((section) => (
+                  <CommandItem key={section.value} onSelect={() => onSelect("section", section.value)}>
                     {section.icon}
                     <span>{section.label}</span>
                   </CommandItem>
@@ -111,7 +120,7 @@ const ChatInputArea = ({
             {filteredFiles.length > 0 && (
               <CommandGroup heading="Files">
                 {filteredFiles.map((file) => (
-                  <CommandItem key={file.value} onSelect={() => onSelect('file', file.value)}>
+                  <CommandItem key={file.value} onSelect={() => onSelect("file", file.value)}>
                     <Paperclip className="mr-2 h-4 w-4" />
                     <span>{file.label}</span>
                   </CommandItem>
@@ -121,7 +130,7 @@ const ChatInputArea = ({
             {filteredPriorities.length > 0 && (
               <CommandGroup heading="Priorities">
                 {filteredPriorities.map((priority) => (
-                  <CommandItem key={priority.value} onSelect={() => onSelect('priority', priority.value)}>
+                  <CommandItem key={priority.value} onSelect={() => onSelect("priority", priority.value)}>
                     <Pilcrow className="mr-2 h-4 w-4" />
                     <span>{priority.label}</span>
                   </CommandItem>
@@ -131,7 +140,7 @@ const ChatInputArea = ({
             {filteredTopics.length > 0 && (
               <CommandGroup heading="Topics">
                 {filteredTopics.map((topic) => (
-                  <CommandItem key={topic.value} onSelect={() => onSelect('topic', topic.value)}>
+                  <CommandItem key={topic.value} onSelect={() => onSelect("topic", topic.value)}>
                     <Hash className="mr-2 h-4 w-4" />
                     <span>{topic.label}</span>
                   </CommandItem>
@@ -166,4 +175,4 @@ const ChatInputArea = ({
   );
 };
 
-export default ChatInputArea; 
+export default ChatInputArea;
