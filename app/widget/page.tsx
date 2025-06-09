@@ -2,49 +2,12 @@
 
 import { useEffect, useState } from "react";
 import ChatContainer from "@/components/chats/chat-container";
-import { createClient } from "@/lib/supabase/client";
 import { useChatStore } from "@/lib/store/use-chat-store";
 import { WidgetDataContext } from "./page-types";
-import { Session } from "@supabase/supabase-js";
 
 export default function ChatWidget() {
   // Use the shared store to set the context for ChatContainer
   const { setContext } = useChatStore();
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [session, setSession] = useState<Session | null>(null);
-
-  // This useEffect handles the anonymous Supabase session for the widget user
-  useEffect(() => {
-    const supabase = createClient();
-
-    const checkAndSignIn = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session || session.user.is_anonymous) {
-          console.log("No active session or is anonymous, signing in to ensure session...");
-          const { error: signInError, data: { user, session } } = await supabase.auth.signInAnonymously();
-          if (signInError) {
-            console.error("Error signing in anonymously:", signInError);
-          } else {
-            console.log("Signed in anonymously successfully.");
-            setSession(session);
-          }
-
-          console.log("User", user);
-          console.log("Session", session);
-        } else {
-          console.log("Active session found:", session.user.id);
-        }
-      } catch (error) {
-        console.error("Error checking/signing in session:", error);
-      } finally {
-        setIsAuthReady(true);
-      }
-    };
-    checkAndSignIn();
-  }, []);
 
   // This useEffect handles messages received from the parent window
   useEffect(() => {
@@ -74,11 +37,6 @@ export default function ChatWidget() {
     return () => window.removeEventListener("message", handleMessage);
   }, [setContext]); // Add setContext to dependency array
 
-  if (!isAuthReady) {
-    // You can return a loader here if you want
-    return null;
-  }
-
   // ChatContainer will pull its state (including context) from the useChatStore
-  return <ChatContainer session={session} />;
+  return <ChatContainer />;
 }

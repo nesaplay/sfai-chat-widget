@@ -18,6 +18,7 @@ import Chat from "./views/chat";
 import { Email, useEmailStore } from "@/lib/store/use-email-store";
 import { createClient } from "@/lib/supabase/client";
 import { WidgetDataContext } from "@/app/widget/page-types";
+import type { Session } from "@supabase/supabase-js";
 
 type Message = Database["public"]["Tables"]["messages"]["Row"];
 type Thread = Pick<
@@ -47,7 +48,7 @@ const generateFallbackTitleFromResponse = (text: string, maxLength = 70) => {
   return title.trim() || "New Chat";
 };
 
-export default function ChatContainer({ session }: { session: { access_token: string } | null }) {
+export default function ChatContainer() {
   const { isOpen, setIsOpen, activeSection, setLoading, loading, context } = useChatStore();
   const { toast } = useToast();
   const { activeEmail, draftEmailResponse } = useEmailStore();
@@ -58,13 +59,27 @@ export default function ChatContainer({ session }: { session: { access_token: st
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(false);
   const [isDrafting, setIsDrafting] = useState<boolean>(false);
+  const [session, setSession] = useState<Session | null>(null);
 
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
   const [messageRead, setMessageRead] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [firstWordHasBeenReceived, setFirstWordHasBeenReceived] = useState(false);
 
-  console.log("CONTEXT", context);
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
 
   const loadInitialChatData = useCallback(
     async (assistantId: string) => {
@@ -388,253 +403,276 @@ export default function ChatContainer({ session }: { session: { access_token: st
     [activeSection, activeEmail, getFilteredContext, toast],
   );
 
-  const handleStreamMessage = async (
-    messageContent: string,
-    originalOnWord: (word: string) => void,
-    options?: {
-      fileId?: string;
-      hiddenMessage?: boolean;
-      assistantId?: string;
-      context?: Partial<WidgetDataContext>;
-    },
-  ) => {
-    if (!activeSection?.assistantId) {
-      toast({ title: "Error", description: "No active assistant selected.", variant: "destructive" });
-      return;
-    }
+  const handleStreamMessage = useCallback(
+    async (
+      messageContent: string,
+      originalOnWord: (word: string) => void,
+      options?: {
+        fileId?: string;
+        hiddenMessage?: boolean;
+        assistantId?: string;
+        context?: Partial<WidgetDataContext>;
+      },
+    ) => {
+      if (!activeSection?.assistantId) {
+        toast({ title: "Error", description: "No active assistant selected.", variant: "destructive" });
+        return;
+      }
 
-    setFirstWordHasBeenReceived(false);
+      setFirstWordHasBeenReceived(false);
 
-    let currentActiveThreadId = activeThreadId;
-    let newThreadJustCreatedByStreamAPI = false;
-    const { data: contextToSend } = getFilteredContext(options?.context);
-    let wasError = false;
+      let currentActiveThreadId = activeThreadId;
+      let newThreadJustCreatedByStreamAPI = false;
+      const { data: contextToSend } = getFilteredContext(options?.context);
+      let wasError = false;
 
-    // Pass Supabase session
-    console.log("Session", session);
-
-    if (!session) throw new Error("Not authenticated");
-
-    const fetchStreamPromise = fetch(CHAT_STREAM_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({
-        message: messageContent,
-        thread_id: currentActiveThreadId,
-        assistantId: options?.assistantId || activeSection.assistantId,
-        filename: options?.fileId,
-        hiddenMessage: options?.hiddenMessage,
-        context: contextToSend,
-      }),
-    });
-
-    setTimeout(() => {
-      setLoading(true);
-      if (currentActiveThreadId && activeSection?.assistantId) {
-        const thinkingMessage: Message = {
-          id: THINKING_MSG_ID,
-          thread_id: currentActiveThreadId,
-          role: "assistant",
-          content: "[[ASSISTANT_THINKING]]",
-          created_at: new Date().toISOString(),
-          user_id: null,
-          assistant_id: activeSection.assistantId,
-          completed: false,
-          metadata: { type: "thinking_indicator" },
-        };
-        setMessages((prevMessages) => {
-          if (prevMessages.find((msg) => msg.id === THINKING_MSG_ID)) {
-            return prevMessages;
-          }
-          return [...prevMessages, thinkingMessage];
+      // 1. Get Supabase auth token
+      if (!session) {
+        console.error("Streaming error: Not authenticated. Session is null.");
+        toast({
+          title: "Authentication Error",
+          description: "Your session could not be verified. Please refresh the page.",
+          variant: "destructive",
         });
-      }
-    }, 1500);
-
-    try {
-      const response = await fetchStreamPromise;
-      const newThreadIdHeader = response.headers.get("X-Thread-ID");
-      if (newThreadIdHeader && newThreadIdHeader !== currentActiveThreadId) {
-        console.log("[ChatContainer] New thread ID from header:", newThreadIdHeader);
-        setActiveThreadId(newThreadIdHeader);
-        currentActiveThreadId = newThreadIdHeader;
-        newThreadJustCreatedByStreamAPI = true;
-        loadInitialChatData(activeSection.assistantId);
+        return;
       }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Streaming failed" }));
-        throw new Error(errorData.error || "Failed to stream message");
-      }
+      const fetchStreamPromise = fetch(CHAT_STREAM_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          message: messageContent,
+          thread_id: currentActiveThreadId,
+          assistantId: options?.assistantId || activeSection.assistantId,
+          filename: options?.fileId,
+          hiddenMessage: options?.hiddenMessage,
+          context: contextToSend,
+        }),
+      });
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No reader available");
-
-      let assistantFullResponse = "";
-      const textDecoder = new TextDecoder();
-      let internalFirstWordHandled = false;
+      setTimeout(() => {
+        setLoading(true);
+        if (currentActiveThreadId && activeSection?.assistantId) {
+          const thinkingMessage: Message = {
+            id: THINKING_MSG_ID,
+            thread_id: currentActiveThreadId,
+            role: "assistant",
+            content: "[[ASSISTANT_THINKING]]",
+            created_at: new Date().toISOString(),
+            user_id: null,
+            assistant_id: activeSection.assistantId,
+            completed: false,
+            metadata: { type: "thinking_indicator" },
+          };
+          setMessages((prevMessages) => {
+            if (prevMessages.find((msg) => msg.id === THINKING_MSG_ID)) {
+              return prevMessages;
+            }
+            return [...prevMessages, thinkingMessage];
+          });
+        }
+      }, 1500);
 
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = textDecoder.decode(value, { stream: true });
-          assistantFullResponse += chunk;
-          originalOnWord(chunk);
-
-          if (!internalFirstWordHandled && chunk.trim().length > 0) {
-            handleFirstWordReceived();
-            internalFirstWordHandled = true;
-          }
+        const response = await fetchStreamPromise;
+        const newThreadIdHeader = response.headers.get("X-Thread-ID");
+        if (newThreadIdHeader && newThreadIdHeader !== currentActiveThreadId) {
+          console.log("[ChatContainer] New thread ID from header:", newThreadIdHeader);
+          setActiveThreadId(newThreadIdHeader);
+          currentActiveThreadId = newThreadIdHeader;
+          newThreadJustCreatedByStreamAPI = true;
+          loadInitialChatData(activeSection.assistantId);
         }
-        const finalChunk = textDecoder.decode();
-        if (finalChunk) {
-          assistantFullResponse += finalChunk;
-          originalOnWord(finalChunk);
-          if (!internalFirstWordHandled && finalChunk.trim().length > 0) {
-            handleFirstWordReceived();
-          }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Streaming failed" }));
+          throw new Error(errorData.error || "Failed to stream message");
         }
-      } finally {
-        console.log("[ChatContainer] Releasing reader lock");
-        reader.releaseLock();
-        setLoading(false);
-      }
 
-      // ---- NEW TITLE UPDATE LOGIC ----
-      if (currentActiveThreadId && assistantFullResponse.trim().length > 0) {
-        const threadToUpdate = threads.find((t) => t.id === currentActiveThreadId);
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No reader available");
 
-        const needsTitleUpdate =
-          newThreadJustCreatedByStreamAPI || threadToUpdate?.title === "Email Management" || !threadToUpdate?.title;
+        let assistantFullResponse = "";
+        const textDecoder = new TextDecoder();
+        let internalFirstWordHandled = false;
 
-        if (needsTitleUpdate) {
-          let newTitle = generateFallbackTitleFromResponse(assistantFullResponse);
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = textDecoder.decode(value, { stream: true });
+            assistantFullResponse += chunk;
+            originalOnWord(chunk);
 
-          try {
-            console.log(
-              `[ChatContainer] Attempting to summarize response for title, length: ${assistantFullResponse.length}`,
-            );
-            const summarizeResponse = await fetch("/api/chat/summarize", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text: assistantFullResponse }),
-            });
-
-            if (summarizeResponse.ok) {
-              const summaryData = await summarizeResponse.json();
-              if (summaryData.summary && summaryData.summary.trim().length > 0) {
-                newTitle = summaryData.summary.trim();
-                console.log(`[ChatContainer] Summary successful, new title: "${newTitle}"`);
-              } else {
-                console.warn("[ChatContainer] Summarization API returned empty summary, using fallback title.");
-              }
-            } else {
-              const errorText = await summarizeResponse.text();
-              console.warn(
-                `[ChatContainer] Summarization API call failed (status: ${summarizeResponse.status}, error: ${errorText}), using fallback title.`,
-              );
+            if (!internalFirstWordHandled && chunk.trim().length > 0) {
+              handleFirstWordReceived();
+              internalFirstWordHandled = true;
             }
-          } catch (summaryError) {
-            console.error("[ChatContainer] Error calling summarization API, using fallback title:", summaryError);
           }
+          const finalChunk = textDecoder.decode();
+          if (finalChunk) {
+            assistantFullResponse += finalChunk;
+            originalOnWord(finalChunk);
+            if (!internalFirstWordHandled && finalChunk.trim().length > 0) {
+              handleFirstWordReceived();
+            }
+          }
+        } finally {
+          console.log("[ChatContainer] Releasing reader lock");
+          reader.releaseLock();
+          setLoading(false);
+        }
 
-          if (
-            newTitle &&
-            newTitle !== threadToUpdate?.title &&
-            (newTitle !== "New Chat" || assistantFullResponse.trim().length > 10) &&
-            newTitle.length > 0
-          ) {
-            console.log(
-              `[ChatContainer] Updating title for thread ${currentActiveThreadId} to: "${newTitle}" (after summary/fallback)`,
-            );
+        // ---- NEW TITLE UPDATE LOGIC ----
+        if (currentActiveThreadId && assistantFullResponse.trim().length > 0) {
+          const threadToUpdate = threads.find((t) => t.id === currentActiveThreadId);
+
+          const needsTitleUpdate =
+            newThreadJustCreatedByStreamAPI || threadToUpdate?.title === "Email Management" || !threadToUpdate?.title;
+
+          if (needsTitleUpdate) {
+            let newTitle = generateFallbackTitleFromResponse(assistantFullResponse);
+
             try {
-              const patchResponse = await fetch(`/api/chat/threads/${currentActiveThreadId}`, {
-                method: "PATCH",
+              console.log(
+                `[ChatContainer] Attempting to summarize response for title, length: ${assistantFullResponse.length}`,
+              );
+              const summarizeResponse = await fetch("/api/chat/summarize", {
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title: newTitle }),
+                body: JSON.stringify({ text: assistantFullResponse }),
               });
 
-              if (patchResponse.ok) {
-                setThreads((prevThreads) =>
-                  prevThreads
-                    .map((thread) =>
-                      thread.id === currentActiveThreadId
-                        ? { ...thread, title: newTitle, updated_at: new Date().toISOString() }
-                        : thread,
-                    )
-                    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
-                );
+              if (summarizeResponse.ok) {
+                const summaryData = await summarizeResponse.json();
+                if (summaryData.summary && summaryData.summary.trim().length > 0) {
+                  newTitle = summaryData.summary.trim();
+                  console.log(`[ChatContainer] Summary successful, new title: "${newTitle}"`);
+                } else {
+                  console.warn("[ChatContainer] Summarization API returned empty summary, using fallback title.");
+                }
               } else {
-                console.error("[ChatContainer] Failed to update thread title via API:", await patchResponse.text());
-                toast({ title: "Error", description: "Could not update chat title.", variant: "destructive" });
+                const errorText = await summarizeResponse.text();
+                console.warn(
+                  `[ChatContainer] Summarization API call failed (status: ${summarizeResponse.status}, error: ${errorText}), using fallback title.`,
+                );
               }
-            } catch (error) {
-              console.error("[ChatContainer] Error calling update thread title API:", error);
-              toast({
-                title: "Error",
-                description: "Failed to update chat title due to a network error.",
-                variant: "destructive",
-              });
+            } catch (summaryError) {
+              console.error("[ChatContainer] Error calling summarization API, using fallback title:", summaryError);
+            }
+
+            if (
+              newTitle &&
+              newTitle !== threadToUpdate?.title &&
+              (newTitle !== "New Chat" || assistantFullResponse.trim().length > 10) &&
+              newTitle.length > 0
+            ) {
+              console.log(
+                `[ChatContainer] Updating title for thread ${currentActiveThreadId} to: "${newTitle}" (after summary/fallback)`,
+              );
+              try {
+                const patchResponse = await fetch(`/api/chat/threads/${currentActiveThreadId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ title: newTitle }),
+                });
+
+                if (patchResponse.ok) {
+                  setThreads((prevThreads) =>
+                    prevThreads
+                      .map((thread) =>
+                        thread.id === currentActiveThreadId
+                          ? { ...thread, title: newTitle, updated_at: new Date().toISOString() }
+                          : thread,
+                      )
+                      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
+                  );
+                } else {
+                  console.error("[ChatContainer] Failed to update thread title via API:", await patchResponse.text());
+                  toast({ title: "Error", description: "Could not update chat title.", variant: "destructive" });
+                }
+              } catch (error) {
+                console.error("[ChatContainer] Error calling update thread title API:", error);
+                toast({
+                  title: "Error",
+                  description: "Failed to update chat title due to a network error.",
+                  variant: "destructive",
+                });
+              }
             }
           }
         }
-      }
-      // ---- END NEW TITLE UPDATE LOGIC ----
+        // ---- END NEW TITLE UPDATE LOGIC ----
 
-      if (currentActiveThreadId) {
-        if (!internalFirstWordHandled) {
+        if (currentActiveThreadId) {
+          if (!internalFirstWordHandled) {
+            setMessages((prevMessages) => prevMessages.filter((msg) => msg.id !== THINKING_MSG_ID));
+          }
+          await loadMessagesForThread(currentActiveThreadId);
+
+          setThreads((prevThreads) => {
+            const threadExists = prevThreads.some((thread) => thread.id === currentActiveThreadId);
+
+            if (!threadExists && newThreadJustCreatedByStreamAPI && currentActiveThreadId && activeSection?.assistantId) {
+              const titleToSet =
+                threads.find((t) => t.id === currentActiveThreadId)?.title ||
+                generateFallbackTitleFromResponse(assistantFullResponse);
+
+              return [
+                {
+                  id: currentActiveThreadId,
+                  title: titleToSet,
+                  updated_at: new Date().toISOString(),
+                  assistant_id: activeSection.assistantId,
+                  created_at: new Date().toISOString(),
+                } as Thread,
+                ...prevThreads,
+              ].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+            }
+            return prevThreads
+              .map((thread) =>
+                thread.id === currentActiveThreadId ? { ...thread, updated_at: new Date().toISOString() } : thread,
+              )
+              .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+          });
+        }
+      } catch (error: any) {
+        console.error("Streaming error:", error);
+        toast({
+          title: "Streaming Error",
+          description: error.message || "Failed to get response.",
+          variant: "destructive",
+        });
+        wasError = true;
+      } finally {
+        setLoading(false);
+        if (!firstWordHasBeenReceived) {
           setMessages((prevMessages) => prevMessages.filter((msg) => msg.id !== THINKING_MSG_ID));
         }
-        await loadMessagesForThread(currentActiveThreadId);
 
-        setThreads((prevThreads) => {
-          const threadExists = prevThreads.some((thread) => thread.id === currentActiveThreadId);
-
-          if (!threadExists && newThreadJustCreatedByStreamAPI && currentActiveThreadId && activeSection?.assistantId) {
-            const titleToSet =
-              threads.find((t) => t.id === currentActiveThreadId)?.title ||
-              generateFallbackTitleFromResponse(assistantFullResponse);
-
-            return [
-              {
-                id: currentActiveThreadId,
-                title: titleToSet,
-                updated_at: new Date().toISOString(),
-                assistant_id: activeSection.assistantId,
-                created_at: new Date().toISOString(),
-              } as Thread,
-              ...prevThreads,
-            ].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-          }
-          return prevThreads
-            .map((thread) =>
-              thread.id === currentActiveThreadId ? { ...thread, updated_at: new Date().toISOString() } : thread,
-            )
-            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-        });
+        if (newThreadJustCreatedByStreamAPI && !wasError && activeSection?.assistantId) {
+          loadInitialChatData(activeSection.assistantId).catch((e) =>
+            console.error("Background reload failed after new thread creation:", e),
+          );
+        }
       }
-    } catch (error: any) {
-      console.error("Streaming error:", error);
-      toast({
-        title: "Streaming Error",
-        description: error.message || "Failed to get response.",
-        variant: "destructive",
-      });
-      wasError = true;
-    } finally {
-      setLoading(false);
-      if (!firstWordHasBeenReceived) {
-        setMessages((prevMessages) => prevMessages.filter((msg) => msg.id !== THINKING_MSG_ID));
-      }
-
-      if (newThreadJustCreatedByStreamAPI && !wasError && activeSection?.assistantId) {
-        loadInitialChatData(activeSection.assistantId).catch((e) =>
-          console.error("Background reload failed after new thread creation:", e),
-        );
-      }
-    }
-  };
+    },
+    [
+      activeSection,
+      activeThreadId,
+      loadInitialChatData,
+      loadMessagesForThread,
+      setLoading,
+      setThreads,
+      threads,
+      toast,
+      context,
+      getFilteredContext,
+      handleFirstWordReceived,
+      firstWordHasBeenReceived,
+      session,
+    ],
+  );
 
   const handleExpandClick = () => {
     setIsExpanded(!isExpanded);
