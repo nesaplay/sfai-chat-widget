@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import ChatContainer from "@/components/chats/chat-container";
 import { createClient } from "@/lib/supabase/client";
 import { useChatStore } from "@/lib/store/use-chat-store";
@@ -9,6 +9,7 @@ import { WidgetDataContext } from "./page-types";
 export default function ChatWidget() {
   // Use the shared store to set the context for ChatContainer
   const { setContext } = useChatStore();
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
   // This useEffect handles the anonymous Supabase session for the widget user
   useEffect(() => {
@@ -21,20 +22,19 @@ export default function ChatWidget() {
         } = await supabase.auth.getSession();
         if (!session || session.user.is_anonymous) {
           console.log("No active session or is anonymous, signing in to ensure session...");
-          const { error: signInError, data: { user, session } } = await supabase.auth.signInAnonymously();
+          const { error: signInError } = await supabase.auth.signInAnonymously();
           if (signInError) {
             console.error("Error signing in anonymously:", signInError);
           } else {
             console.log("Signed in anonymously successfully.");
           }
-
-          console.log("User", user);
-          console.log("Session", session);
         } else {
           console.log("Active session found:", session.user.id);
         }
       } catch (error) {
         console.error("Error checking/signing in session:", error);
+      } finally {
+        setIsAuthReady(true);
       }
     };
     checkAndSignIn();
@@ -67,6 +67,11 @@ export default function ChatWidget() {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [setContext]); // Add setContext to dependency array
+
+  if (!isAuthReady) {
+    // You can return a loader here if you want
+    return null;
+  }
 
   // ChatContainer will pull its state (including context) from the useChatStore
   return <ChatContainer />;
