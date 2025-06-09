@@ -413,7 +413,9 @@ export default function ChatContainer() {
 
       // 1. Get Supabase auth token
       const supabase = createClient();
-      const session = (await supabase.auth.getSession())?.data?.session;
+      const { data: { session } } = await supabase.auth.getSession();
+
+      console.log("Session", session);
 
       if (!session) throw new Error("Not authenticated");
 
