@@ -272,9 +272,9 @@ const ChatContent = ({
     if (sectionTag && context) {
       if (sectionTag.value === "All Sections") {
         contextForMessage = context; // Send the whole context object
-      } else if (context[sectionTag.value]) {
+      } else if (context.data && sectionTag.value in context.data) {
         // Send only the specific section of the context
-        contextForMessage = { [sectionTag.value]: context[sectionTag.value] };
+        contextForMessage = { [sectionTag.value]: context.data[sectionTag.value] };
       }
     }
 

@@ -100,7 +100,7 @@ const StructuredMessage: React.FC<StructuredMessageProps> = ({ content }) => {
                   // Return empty fragment instead of null if value is empty
                   if (value === null || value === undefined || value === '') return <React.Fragment key={key}></React.Fragment>;
 
-                  let displayValue: React.ReactNode = value;
+                  let displayValue: any = value;
                   if ((key === 'due_by' || key.endsWith('_at') || key.endsWith('_date')) && typeof value === 'string') {
                     try {
                       const date = new Date(value);

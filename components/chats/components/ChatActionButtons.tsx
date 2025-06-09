@@ -2,14 +2,8 @@
 
 import type React from "react";
 import { Button } from "@/components/ui/button";
-import {
-  PenLine,
-  FileText,
-  Send,
-  Trash2,
-  Loader2,
-} from "lucide-react";
-import { Email } from '@/types/email'
+import { PenLine, FileText, Send, Trash2, Loader2 } from "lucide-react";
+import { Email } from "@/lib/store/use-email-store";
 
 interface ChatActionButtonsProps {
   activeEmail: Email | null;
@@ -83,21 +77,20 @@ const ChatActionButtons = ({
             Delete
           </Button>
         </>
-      ) : (
-        null
-        // <Button
-        //   variant="outline"
-        //   size="sm"
-        //   onClick={handleDailyDigest}
-        //   disabled={isDrafting || isSending || isDeleting} 
-        //   className="h-8 px-3 text-xs shadow-sm flex-shrink-0"
-        // >
-        //   {isDrafting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PenLine className="mr-1 h-3 w-3" />}
-        //   Daily Digest Report
-        // </Button>
-      )}
+      ) : null
+      // <Button
+      //   variant="outline"
+      //   size="sm"
+      //   onClick={handleDailyDigest}
+      //   disabled={isDrafting || isSending || isDeleting}
+      //   className="h-8 px-3 text-xs shadow-sm flex-shrink-0"
+      // >
+      //   {isDrafting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PenLine className="mr-1 h-3 w-3" />}
+      //   Daily Digest Report
+      // </Button>
+      }
     </div>
   );
 };
 
-export default ChatActionButtons; 
+export default ChatActionButtons;

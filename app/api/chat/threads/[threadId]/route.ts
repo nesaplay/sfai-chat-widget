@@ -9,7 +9,7 @@ const chatWidgetUserId = process.env.CHAT_WIDGET_USER_ID;
 
 type Params = { threadId: string }; // Simpler type for params
 
-export async function PATCH(request: Request, segmentData: { params: Params }) {
+export async function PATCH(request: Request, segmentData: any) {
   // Check for the environment variable inside the request handler
   if (!chatWidgetUserId) {
       console.error("PATCH /api/chat/threads/[threadId] Error: CHAT_WIDGET_USER_ID environment variable is not set.");
