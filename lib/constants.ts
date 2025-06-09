@@ -29,3 +29,4 @@ export const DB_TABLES = {
 };
 
 export const CHAT_STREAM_URL = process.env.NEXT_PUBLIC_STREAM_ENDPOINT || `${API_URL}/api/chat/stream`;
+console.log("CHAT_STREAM_URL", CHAT_STREAM_URL);
