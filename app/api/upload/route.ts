@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
   const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
 
   if (authError || !user) {
-    console.error('Auth Error in POST /api/upload:', authError);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error(`Auth Error in POST /api/upload: ${authError}`);
+    return NextResponse.json({ error: `Auth Error in POST /api/upload: ${authError}` }, { status: 401 });
   }
   const userId = user.id;
   // --- End Authentication ---
