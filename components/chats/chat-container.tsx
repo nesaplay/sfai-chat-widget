@@ -69,10 +69,12 @@ export default function ChatContainer() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("Session in chat container 1", session);
       setSession(session);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("Session in chat container 2", session);
       setSession(session);
     });
 
@@ -185,7 +187,7 @@ export default function ChatContainer() {
   }, [toast]);
 
   useEffect(() => {
-    if (isOpen && session) {
+    if (isOpen) {
       setCurrentScreen("home");
       setIsExpanded(false);
 
@@ -198,13 +200,13 @@ export default function ChatContainer() {
         setActiveThreadId(null);
         setUploadedFiles([]);
       }
-    } else if (!isOpen) {
+    } else {
       setThreads([]);
       setMessages([]);
       setActiveThreadId(null);
       setUploadedFiles([]);
     }
-  }, [isOpen, activeSection, session, loadInitialChatData, getUploadedFilesList]);
+  }, [isOpen, activeSection, loadInitialChatData, getUploadedFilesList]);
 
   useEffect(() => {
     const handleFileUploaded = () => {
