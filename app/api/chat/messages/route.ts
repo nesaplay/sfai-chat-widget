@@ -1,21 +1,12 @@
 import { NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
-import { Database } from '@/types/supabase';
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { Database } from "@/types/supabase";
+import { cookies } from "next/headers";
 
-type Message = Database['public']['Tables']['messages']['Row'];
-
-// --- Get the Predefined Widget User ID ---
-const chatWidgetUserId = process.env.CHAT_WIDGET_USER_ID;
-// --- End Widget User ID ---
+type Message = Database["public"]["Tables"]["messages"]["Row"];
 
 export async function GET(request: Request) {
-  // Check for the environment variable inside the request handler
-  if (!chatWidgetUserId) {
-      console.error("GET /api/chat/messages Error: CHAT_WIDGET_USER_ID environment variable is not set.");
-      return NextResponse.json({ error: "Server configuration error: Widget user not configured." }, { status: 500 });
-  }
-
-  // Removed cookieStore
+  const cookieStore = await cookies();
   const { searchParams } = new URL(request.url);
   const threadId = searchParams.get("thread_id");
 
@@ -23,10 +14,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "thread_id query parameter is required" }, { status: 400 });
   }
 
-  // --- Authentication Removed ---
-  const userId = chatWidgetUserId; // Use the predefined ID
-  console.log(`GET Messages: Acting as predefined Widget User: ${userId} for Thread: ${threadId}`);
-  // --- End Authentication Removal ---
+  const supabaseAuth = createClient(cookieStore);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseAuth.auth.getUser();
+
+  if (authError || !user) {
+    console.error("Auth Error in GET /api/chat/messages:", authError);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = user.id;
 
   // Use service client for DB access
   const supabaseService = createServiceRoleClient();
@@ -35,14 +33,14 @@ export async function GET(request: Request) {
     // --- Verify Thread Ownership (Important!) ---
     // Before fetching messages, make sure the thread belongs to the widget user
     const { data: threadData, error: threadError } = await supabaseService
-      .from('threads')
-      .select('id')
-      .eq('id', threadId)
-      .eq('user_id', userId) // Check ownership
+      .from("threads")
+      .select("id")
+      .eq("id", threadId)
+      .eq("user_id", userId)
       .maybeSingle(); // Use maybeSingle to check existence
 
     if (threadError) {
-      console.error(`Supabase GET thread check error for user ${userId}, thread ${threadId}:`, threadError);
+      console.error(`Supabase GET thread check error for thread ${threadId}:`, threadError);
       return NextResponse.json({ error: `Failed to verify thread access: ${threadError.message}` }, { status: 500 });
     }
 
@@ -56,10 +54,11 @@ export async function GET(request: Request) {
     console.log(`GET Messages: Fetching messages for thread ${threadId} (owned by ${userId})`);
 
     const { data: messages, error: messagesError } = await supabaseService
-      .from('messages')
-      .select('*')
-      .eq('thread_id', threadId)
-      .order('created_at', { ascending: true });
+      .from("messages")
+      .select("*")
+      .eq("thread_id", threadId)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
 
     if (messagesError) {
       console.error(`Supabase GET messages error for thread ${threadId}:`, messagesError);
@@ -68,7 +67,6 @@ export async function GET(request: Request) {
 
     console.log(`GET Messages: Found ${messages?.length || 0} messages for thread ${threadId}`);
     return NextResponse.json({ messages: (messages || []) as Message[] });
-
   } catch (error: any) {
     console.error(`Unexpected GET /api/chat/messages error for thread ${threadId}, user ${userId}:`, error);
     return NextResponse.json({ error: "An unexpected error occurred while fetching messages" }, { status: 500 });
@@ -76,12 +74,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-   // Check for the environment variable inside the request handler
-   if (!chatWidgetUserId) {
-      console.error("POST /api/chat/messages Error: CHAT_WIDGET_USER_ID environment variable is not set.");
-      return NextResponse.json({ error: "Server configuration error: Widget user not configured." }, { status: 500 });
-  }
-
   // Removed cookieStore
   let messageData;
 
@@ -97,10 +89,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required fields: content, thread_id" }, { status: 400 });
   }
 
-  // --- Authentication Removed ---
-  const userId = chatWidgetUserId; // Use the predefined ID
-  console.log(`POST Message: Acting as predefined Widget User: ${userId} for Thread: ${thread_id}`);
-  // --- End Authentication Removal ---
+  const cookieStore = await cookies();
+  const supabaseAuth = createClient(cookieStore);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseAuth.auth.getUser();
+  const userId = user?.id;
+
+  if (!userId) {
+    console.error("Auth Error in POST /api/chat/messages:", authError);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   // --- Use Service Role for DB Write ---
   const supabaseService = createServiceRoleClient();
@@ -109,14 +109,14 @@ export async function POST(request: Request) {
     // --- Verify Thread Ownership (Important!) ---
     // Before inserting, make sure the thread belongs to the widget user
     const { data: threadData, error: threadError } = await supabaseService
-      .from('threads')
-      .select('id, assistant_id') // Select assistant_id if needed for message
-      .eq('id', thread_id)
-      .eq('user_id', userId) // Check ownership
+      .from("threads")
+      .select("id, assistant_id") // Select assistant_id if needed for message
+      .eq("id", thread_id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (threadError) {
-      console.error(`Supabase POST thread check error for user ${userId}, thread ${thread_id}:`, threadError);
+      console.error(`Supabase POST thread check error for thread ${thread_id}:`, threadError);
       return NextResponse.json({ error: `Failed to verify thread access: ${threadError.message}` }, { status: 500 });
     }
 
@@ -126,17 +126,17 @@ export async function POST(request: Request) {
     }
     // --- End Thread Ownership Check ---
 
-    console.log(`POST Message: Inserting message from user ${userId} into thread ${thread_id}`);
+    console.log(`POST Message: Inserting message into thread ${thread_id}`);
 
     const messageToInsert = {
       thread_id: thread_id,
-      user_id: userId, // Always the widget user ID
       // Use assistant_id from thread or request? Clarify logic.
       // If assistant response, assistant_id should be set, role='assistant'
       // If user message, assistant_id is likely null, role='user'
-      assistant_id: role === 'assistant' ? (assistant_id || threadData.assistant_id) : null,
+      assistant_id: role === "assistant" ? assistant_id || threadData.assistant_id : null,
       role: role || "user", // Default to 'user' if not provided
       content: content,
+      user_id: userId,
       // completed: true, // Is this field always true on user POST?
       metadata: metadata || null,
     };
@@ -152,14 +152,16 @@ export async function POST(request: Request) {
       // Check foreign key constraint violation (invalid thread_id)
       if (insertError.code === "23503") {
         // This should be caught by the ownership check now, but keep as safeguard
-        return NextResponse.json({ error: `Invalid thread_id or related constraint failed: ${thread_id}` }, { status: 400 });
+        return NextResponse.json(
+          { error: `Invalid thread_id or related constraint failed: ${thread_id}` },
+          { status: 400 },
+        );
       }
       return NextResponse.json({ error: `Failed to save message: ${insertError.message}` }, { status: 500 });
     }
 
     console.log(`POST Message: Successfully inserted message ${newMessage.id} for user ${userId}`);
     return NextResponse.json(newMessage as Message, { status: 201 });
-
   } catch (error: any) {
     console.error(`Unexpected POST message error for thread ${thread_id}, user ${userId}:`, error);
     return NextResponse.json({ error: "An unexpected error occurred while saving the message" }, { status: 500 });

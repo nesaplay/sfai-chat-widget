@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,7 +47,7 @@ const generateFallbackTitleFromResponse = (text: string, maxLength = 70) => {
   return title.trim() || "New Chat";
 };
 
-export default function ChatContainer() {
+export default function ChatContainer({ session: sessionFromProp }: { session: Session | null }) {
   const { isOpen, setIsOpen, activeSection, setLoading, loading, context } = useChatStore();
   const { toast } = useToast();
   const { activeEmail, draftEmailResponse } = useEmailStore();
@@ -59,29 +58,29 @@ export default function ChatContainer() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(false);
   const [isDrafting, setIsDrafting] = useState<boolean>(false);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(sessionFromProp);
 
   const [currentScreen, setCurrentScreen] = useState<Screen>("home");
   const [messageRead, setMessageRead] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [firstWordHasBeenReceived, setFirstWordHasBeenReceived] = useState(false);
 
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("Session in chat container 1", session);
-      setSession(session);
-    });
+  console.log("CONTEXT", context);
 
+  useEffect(() => {
+    console.log("Session in chat container received via prop:", sessionFromProp);
+    setSession(sessionFromProp);
+
+    const supabase = createClient();
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("Session in chat container 2", session);
+      console.log("Session in chat container updated via listener:", session);
       setSession(session);
     });
 
     return () => {
       authListener?.subscription.unsubscribe();
     };
-  }, []);
+  }, [sessionFromProp]);
 
   const loadInitialChatData = useCallback(
     async (assistantId: string) => {
@@ -111,8 +110,8 @@ export default function ChatContainer() {
             // Update state with the new thread and welcome message
             setThreads([welcomeData.thread]);
             setMessages([welcomeData.message]);
-            // setActiveThreadId(welcomeData.thread.id);
-            // setCurrentScreen("chat"); // Go directly to chat screen
+            setActiveThreadId(welcomeData.thread.id);
+            setCurrentScreen("chat"); // Go directly to chat screen
           } catch (welcomeError: any) {
             console.error("Error creating welcome thread:", welcomeError);
             toast({

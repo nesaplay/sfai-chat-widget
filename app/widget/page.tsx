@@ -10,7 +10,6 @@ import { Session } from "@supabase/supabase-js";
 export default function ChatWidget() {
   // Use the shared store to set the context for ChatContainer
   const { setContext } = useChatStore();
-  const [isAuthReady, setIsAuthReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
 
   // This useEffect handles the anonymous Supabase session for the widget user
@@ -31,16 +30,11 @@ export default function ChatWidget() {
             console.log("Signed in anonymously successfully.");
             setSession(session);
           }
-
-          console.log("User", user);
-          console.log("Session", session);
         } else {
           console.log("Active session found:", session.user.id);
         }
       } catch (error) {
         console.error("Error checking/signing in session:", error);
-      } finally {
-        setIsAuthReady(true);
       }
     };
     checkAndSignIn();
@@ -74,11 +68,6 @@ export default function ChatWidget() {
     return () => window.removeEventListener("message", handleMessage);
   }, [setContext]); // Add setContext to dependency array
 
-  if (!isAuthReady) {
-    // You can return a loader here if you want
-    return null;
-  }
-
   // ChatContainer will pull its state (including context) from the useChatStore
-  return <ChatContainer />;
+  return <ChatContainer session={session} />;
 }
