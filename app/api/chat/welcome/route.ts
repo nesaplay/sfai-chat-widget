@@ -11,23 +11,26 @@ type Thread = Pick<
 
 export async function POST(request: Request) {
   try {
+    // Get the Authorization header
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.error("No Authorization header found");
+      return NextResponse.json({ error: "No authorization token provided" }, { status: 401 });
+    }
+
+    const token = authHeader.split(" ")[1];
     const cookieStore = await cookies();
     const supabaseAuth = createClient(cookieStore);
     
-    // First try to get the session
-    const { data: { session }, error: sessionError } = await supabaseAuth.auth.getSession();
+    // Verify the token
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
     
-    if (sessionError) {
-      console.error(`Session Error in POST /api/chat/welcome:`, sessionError);
-      return NextResponse.json({ error: `Session Error: ${sessionError.message}` }, { status: 401 });
+    if (userError || !user) {
+      console.error(`Auth Error in POST /api/chat/welcome:`, userError);
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    if (!session) {
-      console.error(`Auth Error in POST /api/chat/welcome: No session found`);
-      return NextResponse.json({ error: "No active session found" }, { status: 401 });
-    }
-
-    const userId = session.user.id;
+    const userId = user.id;
     console.log(`POST /api/chat/welcome: Authenticated user ${userId}`);
 
     const body = await request.json();
