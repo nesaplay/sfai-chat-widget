@@ -10,7 +10,6 @@ type Thread = Pick<
 >;
 
 export async function GET(request: Request) {
-  // We no longer need cookieStore
   const { searchParams } = new URL(request.url);
   const assistantId = searchParams.get("assistantId");
 
@@ -19,7 +18,6 @@ export async function GET(request: Request) {
   }
 
   const cookieStore = await cookies();
-
   const supabaseAuth = createClient(cookieStore);
   const {
     data: { user },
@@ -27,8 +25,8 @@ export async function GET(request: Request) {
   } = await supabaseAuth.auth.getUser();
 
   if (authError || !user) {
-    console.error("Auth Error in GET /api/chat/init:", authError);
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.error(`Auth Error in GET /api/chat/init: ${authError}`);
+    return NextResponse.json({ error: `Auth Error in GET /api/chat/init: ${authError}` }, { status: 401 });
   }
   const userId = user.id;
 
